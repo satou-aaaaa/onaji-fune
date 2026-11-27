@@ -1,0 +1,10 @@
+{
+  "screens": [
+    { "name": "今日の船", "click": ["#go-v"] },
+    { "name": "今日の5問", "click": ["#go-d"] },
+    { "name": "練習", "click": ["#go-p"] },
+    { "name": "船の帳", "click": ["#go-dex"] },
+    { "name": "わたしの答え", "click": ["#go-ops"] },
+    { "name": "このゲームについて", "click": ["#f-about"] }
+  ]
+}
