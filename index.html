@@ -1550,11 +1550,19 @@ function load() {
       return { ...w, cur: { ...w.cur, wrong: u(w.cur.wrong, o.cur.wrong), w2: u(w.cur.w2, o.cur.w2), hints: Math.max(+w.cur.hints || 0, +o.cur.hints || 0), step: Math.max(w.cur.step === 2 ? 2 : 1, o.cur.step === 2 ? 2 : 1), h2: w.cur.h2 || o.cur.h2 ? 1 : 0, jd: w.cur.jd || o.cur.jd || null } };
     },
     // 終えた回（gone）は、保存できなかった側から戻さない
-    after: (s2) => { if (s2.gone && typeof s2.gone === "object") for (const m in s2.runs) { const r = s2.runs[m]; if (r && typeof r === "object" && s2.gone[r.id]) s2.runs[m] = null; } },
+    after: (s2, n, o) => {
+      if (s2.gone && typeof s2.gone === "object") for (const m in s2.runs) { const r = s2.runs[m]; if (r && typeof r === "object" && s2.gone[r.id]) s2.runs[m] = null; }
+      // 航海の控えは、両方の写しの回を1回ごとの印（i）で合わせ、新しい順に30まで（保存に失敗した側の回も落とさない。CodeRabbit #1）
+      const seen = new Set(), all = [];
+      for (const x of [...(Array.isArray(n.ops) ? n.ops : []), ...(Array.isArray(o.ops) ? o.ops : [])]) { const id = x && typeof x === "object" ? opId(x) : null; if (id && !seen.has(id)) { seen.add(id); all.push(x); } }
+      s2.ops = all.sort((x, y) => (num(y.t) - num(x.t)) || (y.d > x.d ? 1 : y.d < x.d ? -1 : 0)).slice(0, 30);
+    },
   });
 }
 // 引き継ぎコードなどから入った値を正しい形に直す（数の所に文字が入っていても画面に出さない）
 const num = Core.num; // 共通部品 game-core（配列・true を数にしない #410）
+// 航海の1回ごとの印（同じ答えの別の回も分ける）。印の無い古い形は、中身から作る
+const opId = (o) => (typeof o.i === "string" && /^[\w:-]{1,40}$/.test(o.i) ? o.i : `${o.d}:${o.a}:${o.f}:${num(o.t)}`);
 // 終えた回の id を覚える（保存に失敗しても、合わせるときに終えた回を戻さない）。古いものから捨てて30まで
 function endRun(s, id) { if (typeof id !== "string") return; const g = s.gone && typeof s.gone === "object" && !Array.isArray(s.gone) ? s.gone : {}; g[id] = 1; const ks = Object.keys(g); for (const k of ks.slice(0, Math.max(0, ks.length - 30))) delete g[k]; s.gone = g; }
 function tidy(s) {
@@ -1569,7 +1577,7 @@ function tidy(s) {
   const okRec = (x) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.every((v) => Number.isInteger(v) && v >= 0) && (x.k === undefined || (Array.isArray(x.k) && x.k.every((v) => typeof v === "string")));
   for (const b of [s.days, s.hdays, s.adays]) for (const d in b) if (!okDate(d) || !okRec(b[d])) delete b[d];
   for (const d in s.voy) if (!okDate(d) || !okVoy(s.voy[d])) delete s.voy[d]; else s.voy[d] = { a: s.voy[d].a, f: s.voy[d].f };
-  s.ops = Array.isArray(s.ops) ? s.ops.filter((o) => okVoy(o) && okDate(o.d)).map((o) => ({ d: o.d, a: o.a, f: o.f })).slice(0, 30) : [];
+  s.ops = Array.isArray(s.ops) ? s.ops.filter((o) => okVoy(o) && okDate(o.d)).map((o) => ({ d: o.d, a: o.a, f: o.f, i: opId(o), t: num(o.t) })).slice(0, 30) : [];
   for (const m in s.runs) {
     const r = s.runs[m]; if (r === null) continue;
     if (typeof r !== "object" || !["d", "h", "p", "e", "a", "r"].includes(r.mode) || (m.startsWith("a:") ? r.mode !== "a" : r.mode !== m) || !okDate(r.date) || !Array.isArray(r.list) || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
@@ -1643,7 +1651,7 @@ $("howto").addEventListener("close", () => { if (!load().tut) save((s) => { s.tu
 $("howto-ok").onclick = () => { save((s) => { s.tut = true; }); const d = $("howto"); d.close ? d.close() : d.removeAttribute("open"); }; // 押したらすぐ残す
 
 function home() {
-  Core.screens.route({}, home); Core.screens.mark(""); // 「戻る」でホームへ（sync-template の migrateBack）
+  Core.screens.route({ book, cal: () => cal(), achView, about, opsView, practiceMenu }, home); Core.screens.mark(""); // 「戻る」でホームへ（sync-template の migrateBack）
   const s = load(), k = todayKey(), done = s.days[k], hdone = s.hdays[k];
   // 最後の1問を解いて結果を見る前に閉じた回は、開き直したら結果へ進める（記録をつける）
   for (const m of Object.keys(s.runs)) { const r = s.runs[m]; if (m !== "p" && m !== "e" && r && doneOf(r)) { MODE = m; return finish(); } }
@@ -1737,6 +1745,7 @@ function startRun(mode, opt) {
     if (doneOf(s.runs[mode])) bank(s, s.runs[mode]); // 別のタブで終えたまま記録していない回は、上書きする前に記録する
     let list;
     if (mode === "d" || mode === "h") list = listOf(mode, k);
+    else if (typeof opt === "string" && G.BY[opt] && G.BY[opt].fact) list = [opt, ...G.pickN(G.rng(G.seedOf(rid())), G.kindsOf(3).filter((x) => x !== opt), 4)].map((id, i) => `${id}|${rid()}:${i}`); // 出典の問題は1種類1問なので、その問題から始めて出典の問題を5つ
     else if (typeof opt === "string") list = randomTags([opt], 5, rid(), new Set(), null);
     else list = randomTags(idsOf([opt]), 5, rid(), new Set(), null);
     s.runs[mode] = { mode, date: k, list, res: [], cur: null, id: rid(), a0: achGot(s) };
@@ -2044,7 +2053,7 @@ function voyStep() {
 function voyDone() {
   const a = V.a.map((x) => (x ? "1" : "0")).join(""), d = todayKey(), date = V.date;
   let prev = null;
-  save((s) => { prev = s.ops[0] || null; if (date && !s.voy[date]) s.voy[date] = { a, f: V.f }; s.ops.unshift({ d, a, f: V.f }); s.ops = s.ops.slice(0, 30); });
+  save((s) => { prev = s.ops[0] || null; if (date && !s.voy[date]) s.voy[date] = { a, f: V.f }; s.ops.unshift({ d, a, f: V.f, i: rid(), t: Date.now() }); s.ops = s.ops.slice(0, 30); });
   voyResult({ a, f: V.f }, prev, date);
 }
 function voyResult(rec, prev, date) {

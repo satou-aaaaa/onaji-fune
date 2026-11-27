@@ -12,7 +12,7 @@
   // 出典（画面の「なぜ」に出す）
   const SRC = {
     plut: ["プルタルコス『英雄伝』テセウス伝 23（Perrin 英訳 1914）", "https://lexundria.com/plut_thes/23/prr"],
-    hobbes: ["ホッブズ『物体論』（De Corpore, 1655）第2部第11章7節", "https://www.carneades.pomona.edu/2013-PoP/1119-hdo.pdf"],
+    hobbes: ["ホッブズ『物体論』第2部第11章7節（英訳 Elements of Philosophy, 1656）", "https://archive.org/details/b30335838"],
     sepmc: ["スタンフォード哲学百科事典「Material Constitution」", "https://plato.stanford.edu/entries/material-constitution/"],
     sepit: ["スタンフォード哲学百科事典「Identity Over Time」", "https://plato.stanford.edu/entries/identity-time/"],
   };

@@ -11,6 +11,7 @@ import path from "node:path";
 import { checkTransfer } from "./transfer-check.mjs";
 import { checkSwStall } from "./sw-check.mjs";
 import { checkDepth } from "./depth-check.mjs";
+import { checkCore } from "./core-check.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const results = [];
@@ -75,7 +76,7 @@ const NAME = { L: "左の船 ●", R: "右の船 ▲", both: "両方", none: "�
   const longWhy = [], longLook = [], longOpt = [];
   for (const k of G.KINDS) { for (let s = 0; s < 200; s++) { const P = G.make(`${k.id}|len${s}`); if ([...P.why].length > 100) longWhy.push(k.id); if ([...P.look].length > 45 || [...P.key].length > 60) longLook.push(k.id); for (const o of P.opts) if ([...o].length > 20) longOpt.push(`${k.id}:${o}`); if ([...P.q].length > 80) longOpt.push(`${k.id}:${P.q}`); } }
   check("説明は100字以内・ヒントは45字・60字以内・選び肢は20字以内・問いは80字以内（やさしい日本語。一文を短く）", !longWhy.length && !longLook.length && !longOpt.length, longWhy.concat(longLook, longOpt.slice(0, 3)).join(","));
-  const okSrc = JSON.stringify(Object.values(G.SRC).map((x) => x[1])) === JSON.stringify(["https://lexundria.com/plut_thes/23/prr", "https://www.carneades.pomona.edu/2013-PoP/1119-hdo.pdf", "https://plato.stanford.edu/entries/material-constitution/", "https://plato.stanford.edu/entries/identity-time/"]) && G.KINDS.every((k) => k.src.length && k.src.every((x) => G.SRC[x]));
+  const okSrc = JSON.stringify(Object.values(G.SRC).map((x) => x[1])) === JSON.stringify(["https://lexundria.com/plut_thes/23/prr", "https://archive.org/details/b30335838", "https://plato.stanford.edu/entries/material-constitution/", "https://plato.stanford.edu/entries/identity-time/"]) && G.KINDS.every((k) => k.src.length && k.src.every((x) => G.SRC[x]));
   check("出典はプルタルコス（Perrin 英訳）・ホッブズ『物体論』・スタンフォード哲学百科事典の2項目だけ・どの種類にも出典がある", okSrc);
   // 航海（正解のない問い）：札ごとの答え方と、変わり目・近い札の数え方
   const v = G.voyage("2026-11-27"), sc = G.voyScore([true, true, false, false, false, false], "B"), all = G.voyScore([true, true, true, true, true, true], "A");
@@ -508,11 +509,18 @@ try {
   // キーボードだけで遊べる（Tab と Enter）
   {
     const q = await newPage(); await closeHow(q);
-    await q.focus("#go-d"); await q.keyboard.press("Enter"); await q.waitForTimeout(100);
+    // focus() で直に当てず、Tab を押して届くかを見る（tabindex=-1 などで Tab で届かない所を見落とさない。CodeRabbit #1）
+    const tabTo = async (sel) => { for (let i = 0; i < 80; i++) { await q.keyboard.press("Tab"); if (await q.evaluate((x) => !!document.activeElement && document.activeElement.matches(x), sel)) return true; } return false; };
+    const got = [];
+    await q.evaluate(() => { document.activeElement && document.activeElement.blur && document.activeElement.blur(); scrollTo(0, 0); });
+    got.push(await tabTo("#go-v")); await q.keyboard.press("Enter"); await q.waitForTimeout(100);
+    for (let n = 0; n < 6; n++) { got.push(await tabTo('#vchoices [data-y="1"]')); await q.keyboard.press("Enter"); await q.waitForTimeout(80); }
+    got.push(await tabTo('#vchoices [data-f="both"]')); await q.keyboard.press("Enter"); await q.waitForTimeout(100);
+    got.push(await tabTo("#go-d")); await q.keyboard.press("Enter"); await q.waitForTimeout(100);
     const j = await ansIdx(q);
-    await q.focus(`.ch[data-j="${j}"]`); await q.keyboard.press("Enter"); await q.waitForTimeout(100);
-    if (await q.locator(".why button").count()) { await q.focus(`.why button[data-g="${await q.evaluate(() => __nm.cur().P.grp)}"]`); await q.keyboard.press("Enter"); await q.waitForTimeout(100); }
-    check("キーボードだけで選んで答えられる（2段目もキーボードで）", await q.locator(".verdict").count() === 1);
+    got.push(await tabTo(`.ch[data-j="${j}"]`)); await q.keyboard.press("Enter"); await q.waitForTimeout(100);
+    if (await q.locator(".why button").count()) { got.push(await tabTo(`.why button[data-g="${await q.evaluate(() => __nm.cur().P.grp)}"]`)); await q.keyboard.press("Enter"); await q.waitForTimeout(100); }
+    check("キーボードだけ（Tab と Enter）で、航海・今日の5問・2段目まで答えられる", got.every(Boolean) && await q.locator(".verdict").count() === 1, got.join(","));
     await q.context().close();
   }
 } catch (e) { check("ブラウザでの検査が最後まで動く", false, e.stack.split("\n").slice(0, 3).join(" ")); }
@@ -525,25 +533,36 @@ try {
   await q.click("#go-v"); await q.waitForTimeout(100);
   const s1 = await q.evaluate(() => ({ n: document.querySelectorAll("#vchoices .ch").length, svg: !!document.querySelector("#card svg[role=img][aria-label]"), h: [...document.querySelectorAll("#vchoices .ch")].map((b) => Math.round(b.getBoundingClientRect().height)), txt: document.querySelector("#vchoices").textContent, w: document.documentElement.scrollWidth }));
   check("航海：船の絵（読み上げの言葉つき）と「はい・いいえ」の2つ（○ ✕ の記号つき・44px以上・幅320pxではみ出さない）・正解の印もヒントも無い", s1.n === 2 && s1.svg && s1.h.every((h) => h >= 44) && /○/.test(s1.txt) && /✕/.test(s1.txt) && s1.w <= 320 && await q.locator("#hint, .sure-row, .stars").count() === 0, JSON.stringify(s1));
-  const ord = await q.evaluate(() => __nm.voyStep().v.order);
-  check("航海：今日の船の板の順は日付で決まる（data.js の voyage と同じ）", JSON.stringify(ord) === JSON.stringify(G.voyage(TODAY).order));
+  const [ord, pday] = await q.evaluate(() => [__nm.voyStep().v.order, __nm.voyStep().date]);
+  check("航海：今日の船の板の順は日付で決まる（data.js の voyage と同じ。ページの今日で比べる）", JSON.stringify(ord) === JSON.stringify(G.voyage(pday).order), pday);
   for (const y of [1, 1, 0, 0, 1, 0]) { await q.click(`#vchoices [data-y="${y}"]`); }
   check("航海：6枚かえたら、古い板の2そう目と4つの答え（● かえ続けた・▲ 古い板・両方・どちらでもない）", await q.locator("#vchoices [data-f]").count() === 4 && (await q.textContent("#vq")).includes("古い板"));
   await q.click('#vchoices [data-f="A"]'); await q.waitForTimeout(100);
+  check("航海の終わりには★・Ko-fi・シェアを出さない（正解のない問い）", await q.locator(".stars, .kofi, #share").count() === 0 && !/★|Ko-fi/.test(await q.textContent("#app")));
   const st = await mem(q), sc = G.voyScore([true, true, false, false, true, false], "A");
   check("航海の終わり：答えの変わり目（3枚目）・一度「別」のあと「同じ」にもどったこと・近い札（合った数）が出る", (await q.textContent("#turn")).includes("3枚目") && (await q.textContent("body")).includes("もどりました") && (await q.textContent("#near")).includes(sc.near.map((c) => G.CARDS[c].name).join("")) && await q.locator("#near .bars").count() === 3, await q.textContent("#near"));
-  check("航海の答えは今日の船（voy）と控え（ops）に残り、今日の記録・正解の数・連続には数えない", st.voy && st.voy[TODAY] && st.voy[TODAY].a === "110010" && st.voy[TODAY].f === "A" && st.ops.length === 1 && !Object.keys(st.days || {}).length && !Object.keys(st.dex || {}).length, JSON.stringify(st));
+  check("航海の答えは今日の船（voy）と控え（ops）に残り、今日の記録・正解の数・連続には数えない", st.voy && st.voy[pday] && st.voy[pday].a === "110010" && st.voy[pday].f === "A" && st.ops.length === 1 && !Object.keys(st.days || {}).length && !Object.keys(st.dex || {}).length, JSON.stringify(st));
   await q.click("#go-d"); await q.waitForTimeout(100);
-  check("航海のあと「今日の5問へ」で札の問題が始まる", JSON.stringify(await q.evaluate(() => __nm.load().runs.d.list)) === JSON.stringify(G.dailyTags(TODAY)) && await q.locator("#fuda").count() + await q.locator(".ch").count() >= 4);
+  check("航海のあと「今日の5問へ」で札の問題が始まる", JSON.stringify(await q.evaluate(() => __nm.load().runs.d.list)) === JSON.stringify(G.dailyTags(pday)) && await q.locator("#fuda").count() + await q.locator(".ch").count() >= 4);
   await q.click("#back"); await q.waitForTimeout(100);
   check("今日の船を出したあとは、ホームに「今日の船を出す」が無く、「もう一度、船を出す」はいつでも押せる", await q.locator("#go-v").count() === 0 && await q.locator("#go-v2").count() === 1);
   await q.click("#go-v2"); for (let i = 0; i < 6; i++) await q.click('#vchoices [data-y="1"]'); await q.click('#vchoices [data-f="both"]'); await q.waitForTimeout(100);
-  check("もう一度の航海：前の回の変わり目と近い札も出る・今日の船の答えは書きかえない", (await q.textContent("#prevturn")).includes("3枚目") && (await q.textContent("#turn")).includes("最後まで") && (await mem(q)).voy[TODAY].a === "110010" && (await mem(q)).ops.length === 2);
+  check("もう一度の航海：前の回の変わり目と近い札も出る・今日の船の答えは書きかえない", (await q.textContent("#prevturn")).includes("3枚目") && (await q.textContent("#turn")).includes("最後まで") && (await mem(q)).voy[pday].a === "110010" && (await mem(q)).ops.length === 2);
   await q.click("#go-ops"); await q.waitForTimeout(100);
   check("わたしの答え：航海の控えが新しい順に並び、札ごとの近かった回数が出る", await q.locator("#opslist > div").count() === 2 && (await q.textContent("#opslist > div:first-child")).includes("最後まで同じ船"));
-  await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("onf-v1")); s.voy = { "2026-11-27": { a: "11x", f: "A" }, bad: { a: "111111", f: "A" }, [__nm.todayKey()]: s.voy[__nm.todayKey()] }; s.ops.push({ d: "2026-11-27", a: "111111", f: "<b id=xv>" }, "x", { d: "x", a: "000000", f: "B" }); localStorage.setItem("onf-v1", JSON.stringify(s)); }); await q.reload(); await q.waitForTimeout(150);
+  await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("onf-v1")); s.voy = { "2026-01-02": { a: "11x", f: "A" }, bad: { a: "111111", f: "A" }, [__nm.todayKey()]: s.voy[__nm.todayKey()] }; s.ops.push({ d: "2026-11-27", a: "111111", f: "<b id=xv>" }, "x", { d: "x", a: "000000", f: "B" }); localStorage.setItem("onf-v1", JSON.stringify(s)); }); await q.reload(); await q.waitForTimeout(150);
   const t2 = await q.evaluate(() => __nm.load());
   check("記録の形を直す：形のちがう航海の答え（6字でない・知らない最後の答え・日付でない）は捨てる", Object.keys(t2.voy).length === 1 && t2.ops.length === 2 && await q.locator("#xv").count() === 0, JSON.stringify([t2.voy, t2.ops]));
+  // 保存に失敗した側の航海の控えも、合わせるときに落とさない（1回ごとの印で合わせる。CodeRabbit #1）
+  const mg = await q.evaluate(() => { const base = __nm.load(), a = JSON.parse(JSON.stringify(base)), b = JSON.parse(JSON.stringify(base));
+    a.ops.unshift({ d: __nm.todayKey(), a: "111111", f: "A", i: "tabA", t: Date.now() + 2e6 }); a.t = 100;
+    b.ops.unshift({ d: __nm.todayKey(), a: "111111", f: "A", i: "tabB", t: Date.now() + 1e6 }); b.t = 200;
+    localStorage.setItem("onf-v1", JSON.stringify(b)); __nm.setMem(JSON.stringify(a)); const r = __nm.load(); __nm.setMem(null); return r.ops.map((o) => o.i); });
+  check("保存に失敗した側の航海の控え（同じ答えの別の回も）を、別のタブの控えと合わせて残す・新しい順", mg[0] === "tabA" && mg[1] === "tabB" && mg.length <= 30, mg.join(","));
+  // 船の帳で出典の問題を選んでも5問（出典の問題は1種類1問なので、ほかの出典の問題を足す。CodeRabbit #1）
+  await q.evaluate(() => { __nm.save((s) => { s.dex["who-plut"] = 1; }); __nm.book(); }); await q.click('.book button[data-k="who-plut"]'); await q.waitForTimeout(100);
+  const fl = await q.evaluate(() => __nm.load().runs.p.list);
+  check("船の帳で出典の問題を選ぶと、その問題から始まる出典の問題5問（重ならない）", fl.length === 5 && fl[0].startsWith("who-plut|") && new Set(fl.map((t) => t.split("|")[0])).size === 5 && fl.every((t) => G.BY[t.split("|")[0]].fact), fl.join(","));
   await q.close();
 } catch (e) { check("航海の検査が最後まで動く", false, e.stack.split("\n").slice(0, 3).join(" ")); }
 // 深さの部品（shared-workflows template/qa/depth-check.mjs）
@@ -575,6 +594,13 @@ try {
   const sample = { "onf-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-13": { m: [0, 1, 0, 0, 2], k: ["copy-kata", "hobbes-kata", "raft-ita", "partial-tsuna", "who-plut"] } }, hdays: {}, adays: {}, dex: { "copy-kata": 1, "hobbes-kata": 1, "raft-ita": 1, "partial-tsuna": 1, "who-plut": 1 }, runs: {}, kofi: {}, ach: {}, ebest: 7, t: 1 }), "onf-fs": "3", "onf-depth": JSON.stringify({ v: 1, rv: { "hobbes-kata|x1": { s: 1, due: "2026-11-20", t: 5 } } }) }; // 復習の記録も引き継ぐかを見る（CodeRabbit menkyo-nenrei#1）
   await checkTransfer({ browser, url, game: "onaji-fune", sample, check, open: async (pg) => { await firstClose(pg); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
+// 共通部品 game-core（shared-workflows template/qa/core-check.mjs）：感想フォーム・はじめての案内・？ 遊び方・不具合の帯
+try {
+  // first: false・solve なし … core-check の吹き出しを進める回し方は、wait の段（答えるまで隠れる「次へ」の吹き出し）で、
+  // 隠れた箱（#core-coach[hidden]）の中のボタンを押そうとして30秒止まる（ひな形 template/qa/core-check.mjs の不具合。shared-workflows で直す）。
+  // はじめての案内そのものは、上の「はじめて開くと遊び方が出る」「その場で『見た』が残る」「Esc で閉じても出ない」で見ている
+  await checkCore({ browser, url, check, first: false });
+} catch (e) { check("game-core の検査が最後まで動く", false, e.message.split("\n")[0]); }
 await browser.close();
 server.close();
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));

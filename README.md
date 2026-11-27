@@ -5,7 +5,7 @@
 遊ぶ: <https://satou-aaaaa.github.io/onaji-fune/>
 
 - テセウスの船の話は、プルタルコス『英雄伝』テセウス伝 23（Perrin 英訳 1914: <https://lexundria.com/plut_thes/23/prr>）にあります。
-- 古い板で2そう目を組む問いは、ホッブズ『物体論』（De Corpore, 1655）第2部第11章7節にあります（英訳の抜き書き: <https://www.carneades.pomona.edu/2013-PoP/1119-hdo.pdf>）。
+- 古い板で2そう目を組む問いは、ホッブズ『物体論』（De Corpore, 1655）第2部第11章7節にあります（1656年の英訳 Elements of Philosophy: <https://archive.org/details/b30335838>）。
 - 3つの札は、哲学の考え方をゲームのために短くしたものです。どれが正しいかは、今も決まっていません。もとになった考え方は、スタンフォード哲学百科事典の「Material Constitution」（<https://plato.stanford.edu/entries/material-constitution/>）と「Identity Over Time」（<https://plato.stanford.edu/entries/identity-time/>）。
 - 航海の「まだ同じ船？」には正解がありません。札の問題の答えは、札の言葉だけで決まります。
 - 記録は遊ぶ人のブラウザだけに残り、外へ送りません。
