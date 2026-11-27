@@ -2053,7 +2053,8 @@ function voyStep() {
 function voyDone() {
   const a = V.a.map((x) => (x ? "1" : "0")).join(""), d = todayKey(), date = V.date;
   let prev = null;
-  save((s) => { prev = s.ops[0] || null; if (date && !s.voy[date]) s.voy[date] = { a, f: V.f }; s.ops.unshift({ d, a, f: V.f, i: rid(), t: Date.now() }); s.ops = s.ops.slice(0, 30); });
+  // 控えの時刻は、今の控えのどれよりも後にする（時計を戻しても、いま終えた回を合わせるときに切り捨てない。CodeRabbit #1）
+  save((s) => { prev = s.ops[0] || null; if (date && !s.voy[date]) s.voy[date] = { a, f: V.f }; s.ops.unshift({ d, a, f: V.f, i: rid(), t: s.ops.reduce((m, o) => Math.max(m, num(o.t) + 1), Date.now()) }); s.ops = s.ops.slice(0, 30); });
   voyResult({ a, f: V.f }, prev, date);
 }
 function voyResult(rec, prev, date) {

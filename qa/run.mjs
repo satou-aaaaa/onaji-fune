@@ -559,6 +559,11 @@ try {
     b.ops.unshift({ d: __nm.todayKey(), a: "111111", f: "A", i: "tabB", t: Date.now() + 1e6 }); b.t = 200;
     localStorage.setItem("onf-v1", JSON.stringify(b)); __nm.setMem(JSON.stringify(a)); const r = __nm.load(); __nm.setMem(null); return r.ops.map((o) => o.i); });
   check("保存に失敗した側の航海の控え（同じ答えの別の回も）を、別のタブの控えと合わせて残す・新しい順", mg[0] === "tabA" && mg[1] === "tabB" && mg.length <= 30, mg.join(","));
+  // 時計が戻っていても、いま終えた航海が控えのいちばん上に来る（CodeRabbit #1）
+  await q.evaluate(() => { __nm.save((s) => { s.ops[0].t = Date.now() + 9e9; }); }); await q.evaluate(() => __nm.voyage(null));
+  for (let n = 0; n < 6; n++) await q.click('#vchoices [data-y="0"]'); await q.click('#vchoices [data-f="none"]'); await q.waitForTimeout(100);
+  const top = await q.evaluate(() => __nm.load().ops[0]);
+  check("時計が戻っていても、いま終えた航海が控えのいちばん上に残る", top.a === "000000" && top.f === "none", JSON.stringify(top));
   // 船の帳で出典の問題を選んでも5問（出典の問題は1種類1問なので、ほかの出典の問題を足す。CodeRabbit #1）
   await q.evaluate(() => { __nm.save((s) => { s.dex["who-plut"] = 1; }); __nm.book(); }); await q.click('.book button[data-k="who-plut"]'); await q.waitForTimeout(100);
   const fl = await q.evaluate(() => __nm.load().runs.p.list);
